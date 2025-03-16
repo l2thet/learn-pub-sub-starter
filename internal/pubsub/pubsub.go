@@ -7,6 +7,14 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type AckType int
+
+const (
+	Ack AckType = iota
+	NackRequeue
+	NackDiscard
+)
+
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	jsonVal, err := json.Marshal(val)
 	if err != nil {
@@ -46,4 +54,36 @@ func DeclareAndBind(
 	ch.QueueBind(queueName, key, exchange, noWait, nil)
 
 	return ch, queue, nil
+}
+
+func SubscribeJSON[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType int,
+	handler func(T) AckType,
+) error {
+	ch, queue, err := DeclareAndBind(conn, exchange, queueName, key, simpleQueueType)
+	if err != nil {
+		return err
+	}
+
+	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	for msg := range msgs {
+		var val T
+		err := json.Unmarshal(msg.Body, &val)
+		if err != nil {
+			return err
+		}
+
+		handler(val)
+		msg.Ack(false)
+	}
+
+	return nil
 }

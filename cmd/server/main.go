@@ -28,6 +28,7 @@ func main() {
 	// pubsub.PublishJSON(newChan, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{
 	// 	IsPaused: true,
 	// })
+	pubsub.DeclareAndBind(con, routing.ExchangePerilTopic, routing.GameLogSlug, "game_logs.*", 1)
 
 	fmt.Println("Connected to RabbitMQ")
 
