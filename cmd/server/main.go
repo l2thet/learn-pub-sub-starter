@@ -30,6 +30,21 @@ func main() {
 	// })
 	pubsub.DeclareAndBind(con, routing.ExchangePerilTopic, routing.GameLogSlug, "game_logs.*", 1)
 
+	go func() {
+		if err := pubsub.SubscribeGob(
+			con,
+			routing.ExchangePerilTopic,
+			string(routing.GameLogSlug),
+			fmt.Sprintf("%s.*", routing.GameLogSlug),
+			1,
+			handlerGameLog(),
+		); err != nil {
+			fmt.Printf("Failed to set up consumer: %v", err)
+		}
+
+		fmt.Println("Game log consumer started")
+	}()
+
 	fmt.Println("Connected to RabbitMQ")
 
 	for {
@@ -65,4 +80,16 @@ func main() {
 
 	}
 
+}
+
+func handlerGameLog() func(routing.GameLog) pubsub.AckType {
+	return func(gamelog routing.GameLog) pubsub.AckType {
+		defer fmt.Print("> ")
+		err := gamelogic.WriteLog(gamelog)
+		if err != nil {
+			fmt.Printf("Failed to write log: %v\n", err)
+			return pubsub.NackRequeue
+		}
+		return pubsub.Ack
+	}
 }

@@ -110,6 +110,58 @@ func SubscribeJSON[T any](
 	return nil
 }
 
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType int,
+	handler func(T) AckType,
+) error {
+	ch, queue, err := DeclareAndBind(conn, exchange, queueName, key, simpleQueueType)
+	if err != nil {
+		return err
+	}
+
+	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	unmarshaller := func(data []byte) (T, error) {
+		decData := bytes.NewBuffer(data)
+
+		var target T
+		err := gob.NewDecoder(decData).Decode(&target)
+		return target, err
+	}
+
+	go func() {
+		defer ch.Close()
+		for msg := range msgs {
+			target, err := unmarshaller(msg.Body)
+			if err != nil {
+				fmt.Printf("could not unmarshal message: %v\n", err)
+				continue
+			}
+			switch handler(target) {
+			case Ack:
+				msg.Ack(false)
+				fmt.Println("Ack")
+			case NackDiscard:
+				msg.Nack(false, false)
+				fmt.Println("NackDiscard")
+			case NackRequeue:
+				msg.Nack(false, true)
+				fmt.Println("NackRequeue")
+			}
+		}
+	}()
+
+	return nil
+
+}
+
 func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	var encData bytes.Buffer
 	err := gob.NewEncoder(&encData).Encode(val)
