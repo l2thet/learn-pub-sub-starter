@@ -149,7 +149,27 @@ func main() {
 		case "help":
 			gamelogic.PrintClientHelp()
 		case "spam":
-			fmt.Println("Spamming not allowed yet!")
+			ch, err := con.Channel()
+			if err != nil {
+				panic(err)
+			}
+			defer ch.Close()
+
+			loopCount, err := strconv.Atoi(words[1])
+			if err != nil {
+				fmt.Println("error: " + err.Error())
+				panic(err)
+			}
+			for i := 0; i < loopCount; i++ {
+				msg := gamelogic.GetMaliciousLog()
+				mlog := routing.GameLog{
+					CurrentTime: time.Now(),
+					Message:     msg,
+					Username:    username,
+				}
+				pubsub.PublishGob(ch, routing.ExchangePerilTopic, fmt.Sprintf("%s.%s", routing.GameLogSlug, username), mlog)
+			}
+			fmt.Printf("Spamming %d moves \n", loopCount)
 		case "quit":
 			gamelogic.PrintQuit()
 			return
